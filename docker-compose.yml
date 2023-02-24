@@ -1,0 +1,18 @@
+version: '3'
+services:
+  mongodb:
+    image: "mongo:latest"
+    restart: unless-stopped
+    command: --nojournal --maxConns 1000
+    volumes:
+      - ./db:/data/db
+    network_mode: host
+    logging:
+      options:
+        max-size: "10M"
+        max-file: "5"
+  histomicsui:
+    network_mode: host
+    build:
+      context: .
+      dockerfile: ./histomicsui.Dockerfile
