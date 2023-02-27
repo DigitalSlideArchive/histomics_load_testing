@@ -6,6 +6,7 @@ from pathlib import Path
 
 from girder.models.assetstore import Assetstore
 from girder.models.collection import Collection
+from girder.models.file import File
 from girder.models.folder import Folder
 from girder.models.item import Item
 from girder.models.upload import Upload
@@ -69,7 +70,7 @@ def upload_example(folder, adminUser):
     exampleFileName = "example.tiff"
     exampleFilePath = Path("data/example.tiff")
 
-    item = item = Item().findOne({"folderId": folder["_id"], "name": exampleFileName})
+    item = Item().findOne({"folderId": folder["_id"], "name": exampleFileName})
     if not item:
         item = Item().createItem(exampleFileName, creator=adminUser, folder=folder)
         with open(exampleFilePath, "rb") as f:
@@ -81,13 +82,17 @@ def upload_example(folder, adminUser):
                 parent=item,
                 user=adminUser,
             )
-            try:
+            files = list(Item().childFiles(item=item, limit=2))
+            if len(files) == 1:
+                large_image_file_id = str(files[0]["_id"])
+                large_image_file = File().load(
+                    large_image_file_id, force=True, exc=True
+                )
                 ImageItem().createImageItem(
                     item,
-                    {"itemId": item["_id"]},
+                    large_image_file,
+                    adminUser,
                 )
-            except Exception as e:
-                print(e)
     print(item)
     return item
 

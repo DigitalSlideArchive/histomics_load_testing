@@ -13,6 +13,8 @@ services:
         max-file: "5"
   histomicsui:
     network_mode: host
+    volumes:
+      - ./assetstore:${PWD}/assetstore
     build:
       context: .
       dockerfile: ./histomicsui.Dockerfile
