@@ -1,6 +1,5 @@
 # Please ensure the server is active before running this script
 # references https://github.com/DigitalSlideArchive/digital_slide_archive/blob/master/devops/dsa/provision.py
-import configparser
 import os
 from pathlib import Path
 
@@ -13,10 +12,6 @@ from girder.models.upload import Upload
 from girder.models.user import User
 from girder_large_image.models.image_item import ImageItem
 
-
-config = configparser.ConfigParser()
-config.read("../login.cfg")
-
 server_url = "http://localhost:8080/api/v1"
 
 
@@ -24,8 +19,8 @@ def create_admin_user():
     # If there is are no admin users, create an admin user
     if User().findOne({"admin": True}) is None:
         adminParams = {
-            "login": config["LOGIN"]["USERNAME"],
-            "password": config["LOGIN"]["PASSWORD"],
+            "login": "admin",
+            "password": "myadminpass",
             "firstName": "Admin",
             "lastName": "Admin",
             "email": "admin@nowhere.nil",

@@ -1,10 +1,5 @@
 from locust import HttpUser, task, between
-import configparser
 from girder_client import GirderClient
-
-
-config = configparser.ConfigParser()
-config.read("../login.cfg")
 
 
 class HistomicsUser(HttpUser):
@@ -12,17 +7,12 @@ class HistomicsUser(HttpUser):
 
     def on_start(self):
         self.client = GirderClient()
-        self.client.authenticate(
-            config["LOGIN"]["USERNAME"],
-            config["LOGIN"]["PASSWORD"],
-        )
 
     @task
     def get_tiles(self):
-        # user = self.client.get("user/me")
-        # public_folders = self.client.get("folder?text=Public")
-        # if len(public_folders) == 0:
-        #     raise Exception("No public folders found on server.")
-        # public_folder = public_folders[0]
-        target_items = self.client.get("item")
-        print(target_items)
+        target_items = self.client.get("item", {"text": "example.tiff"})
+        if len(target_items) != 1:
+            raise Exception("Server must be populated. See README.md.")
+        example_item_id = target_items[0]["_id"]
+        tile_metadata = self.client.get(f"item/{example_item_id}/tiles")
+        print(tile_metadata)
