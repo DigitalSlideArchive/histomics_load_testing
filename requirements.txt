@@ -1,4 +1,6 @@
 locust>=2.14.2
 histomicsui>=1.4.1
 configparser
+girder>=3.1.16
 girder-client>=3.1.16
+girder-large-image>=1.20.1
