@@ -37,7 +37,7 @@ def create_admin_user():
 
 def create_assetstore():
     # Make sure we have an assetstore
-    root = Path(".").absolute() / "../assetstore"
+    root = Path(".").absolute() / "assetstore"
     if Assetstore().findOne() is None:
         Assetstore().createFilesystemAssetstore(name="Root", root=root)
 
@@ -66,17 +66,17 @@ def create_collection_folder(adminUser, collName, folderName):
 
 
 def upload_example(folder, adminUser):
-    exampleFile = {"name": "example.tiff", "path": "data/example.tiff"}
-    item = item = Item().findOne(
-        {"folderId": folder["_id"], "name": exampleFile["name"]}
-    )
+    exampleFileName = "example.tiff"
+    exampleFilePath = Path("data/example.tiff")
+
+    item = item = Item().findOne({"folderId": folder["_id"], "name": exampleFileName})
     if not item:
-        item = Item().createItem(exampleFile["name"], creator=adminUser, folder=folder)
-        with open(Path(exampleFile["path"]), "rb") as f:
+        item = Item().createItem(exampleFileName, creator=adminUser, folder=folder)
+        with open(exampleFilePath, "rb") as f:
             Upload().uploadFromFile(
                 f,
-                os.path.getsize(exampleFile["path"]),
-                name=exampleFile["name"],
+                os.path.getsize(exampleFilePath),
+                name=exampleFileName,
                 parentType="item",
                 parent=item,
                 user=adminUser,
