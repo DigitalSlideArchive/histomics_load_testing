@@ -11,7 +11,10 @@ RUN pip install large-image[sources] --no-cache-dir --find-links https://girder.
 RUN cd /opt && \
     git clone https://github.com/DigitalSlideArchive/HistomicsUI && \
     cd /opt/HistomicsUI && \
+    git checkout honor-the-wsgi && \
     pip install --no-cache-dir -e .[analysis]
+
+RUN pip install gunicorn
 
 
 WORKDIR /opt/HistomicsUI
@@ -19,4 +22,10 @@ WORKDIR /opt/HistomicsUI
 # Build the girder web client
 RUN girder build
 
-CMD girder serve
+# Control command
+# CMD girder serve
+
+CMD gunicorn histomicsui.wsgi:app --workers=1
+# CMD gunicorn histomicsui.wsgi:app --workers=5
+# CMD gunicorn histomicsui.wsgi:app --workers=1 --threads=5
+# CMD gunicorn histomicsui.wsgi:app --workers=5 --threads=5

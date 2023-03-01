@@ -8,9 +8,7 @@ services:
       - ./db:/data/db
     network_mode: host
     logging:
-      options:
-        max-size: "10M"
-        max-file: "5"
+      driver: none
   histomicsui:
     network_mode: host
     volumes:
