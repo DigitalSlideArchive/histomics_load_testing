@@ -21,11 +21,3 @@ WORKDIR /opt/HistomicsUI
 
 # Build the girder web client
 RUN girder build
-
-# Control command
-# CMD girder serve
-
-CMD gunicorn histomicsui.wsgi:app --workers=1
-# CMD gunicorn histomicsui.wsgi:app --workers=5
-# CMD gunicorn histomicsui.wsgi:app --workers=1 --threads=5
-# CMD gunicorn histomicsui.wsgi:app --workers=5 --threads=5

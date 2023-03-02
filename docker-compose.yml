@@ -6,11 +6,16 @@ services:
     command: --nojournal --maxConns 1000
     volumes:
       - ./db:/data/db
-    network_mode: host
+    ports:
+      - "27017:27017"
     logging:
       driver: none
   histomicsui:
-    network_mode: host
+    environment:
+      - GIRDER_MONGO_URI=mongodb://mongodb:27017/girder
+    command: ["gunicorn", "histomicsui.wsgi:app", "--bind=0.0.0.0:8080", "--workers=1"]
+    ports:
+      - "8080:8080"
     volumes:
       - ./assetstore:${PWD}/assetstore
     build:
