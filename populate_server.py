@@ -65,11 +65,13 @@ def upload_example(folder, adminUser):
     exampleFileName = "example.tiff"
     exampleFilePath = Path("data/example.tiff")
 
-    item = Item().findOne({"folderId": folder["_id"], "name": exampleFileName})
-    if not item:
-        item = Item().createItem(exampleFileName, creator=adminUser, folder=folder)
+    item = Item().createItem(exampleFileName, creator=adminUser, folder=folder, reuseExisting=True)
+    files = list(Item().childFiles(item=item, limit=1))
+    if files:
+        large_image_file = files[0]
+    else:
         with open(exampleFilePath, "rb") as f:
-            Upload().uploadFromFile(
+            large_image_file = Upload().uploadFromFile(
                 f,
                 os.path.getsize(exampleFilePath),
                 name=exampleFileName,
@@ -77,18 +79,14 @@ def upload_example(folder, adminUser):
                 parent=item,
                 user=adminUser,
             )
-            files = list(Item().childFiles(item=item, limit=2))
-            if len(files) == 1:
-                large_image_file_id = str(files[0]["_id"])
-                large_image_file = File().load(
-                    large_image_file_id, force=True, exc=True
-                )
-                ImageItem().createImageItem(
-                    item,
-                    large_image_file,
-                    adminUser,
-                )
-    print(item)
+
+    if "largeImage" not in item:
+        ImageItem().createImageItem(
+            item,
+            large_image_file,
+            adminUser,
+            createJob=False,
+        )
     return item
 
 
@@ -96,4 +94,4 @@ if __name__ == "__main__":
     adminUser = create_admin_user()
     create_assetstore()
     folder = create_collection_folder(adminUser, "Examples", "Data")
-    upload_example(folder, adminUser)
+    print(upload_example(folder, adminUser))
