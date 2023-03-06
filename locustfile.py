@@ -22,7 +22,7 @@ class HistomicsUser(HttpUser):
             int(self.tile_metadata["sizeY"] / self.tile_metadata["tileHeight"])
         ):
             for x in range(
-                int(self.tile_metadata["sizeX"] / self.tile_metadata["tileHeight"])
+                int(self.tile_metadata["sizeX"] / self.tile_metadata["tileWidth"])
             ):
                 self.client.get(
                     f"item/{self.example_item_id}/tiles/zxy/{z}/{x}/{y}",
