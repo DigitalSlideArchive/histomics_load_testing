@@ -8,7 +8,7 @@ See https://github.com/DigitalSlideArchive/HistomicsUI.
 
  1. Run `docker-compose up` in the top-level directory to start HistomicsUI
 
- 2. Run `python3 populate_server.py` to initialize your user and create the assetstore, collection, and example image item for testing
+ 2. Run `python3 populate_server.py -n {N}` to initialize your user and create the assetstore, collection, and example image items for testing, where `{N}` is the number of distinct large image files you want to upload to the collection. Any `{N}` greater than one will require downloading files from https://data.kitware.com.
 
  3. Navigate to `localhost:8080` in your browser to view HistomicsUI. Click on "Collections". If Step 3 was successful, There should be an "Examples" collection, which contains a folder called "Data". Navigate inside this folder to view the example file.
 
