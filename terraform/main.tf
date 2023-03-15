@@ -28,7 +28,7 @@ resource "aws_security_group" "histomics_sg" {
   vpc_id = aws_default_vpc.default.id
 
   ingress {
-    description      = "TLS from VPC"
+    description      = "Open 8080 to the internet"
     from_port        = 8080
     to_port          = 8080
     protocol         = "tcp"
@@ -36,14 +36,11 @@ resource "aws_security_group" "histomics_sg" {
     ipv6_cidr_blocks = ["::/0"]
   }
 
-  # TODO restrict this to just the histomics container
   ingress {
-    description      = "TLS from VPC"
+    description      = "Allow members of this security group to talk to port 27017"
     from_port        = 27017
     to_port          = 27017
     protocol         = "tcp"
-    cidr_blocks      = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
     self             = true
   }
 
