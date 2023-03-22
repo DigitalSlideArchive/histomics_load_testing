@@ -8,6 +8,9 @@ resource "aws_default_vpc" "default" {
   }
 }
 
+resource "aws_efs_file_system" "assetstore_fs" {
+}
+
 # TODO grab or import default subnets
 
 resource "aws_service_discovery_http_namespace" "internal" {
@@ -22,26 +25,35 @@ resource "aws_cloudwatch_log_group" "mongo_logs" {
   name = "mongo-logs"
 }
 
-resource "aws_security_group" "histomics_sg" {
-  name = "histomics-sg"
+resource "aws_security_group" "efs_mount_target_sg" {
+  name = "efs-mount-target-sg"
 
+  ingress {
+    from_port   = 2049
+    to_port     = 2049
+    protocol    = "tcp"
+    cidr_blocks = ["172.31.0.0/20", "172.31.80.0/20"] # TODO don't hardcode (these are the CIDR blocks of our two subnets)
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "lb_sg" {
+  name   = "lb-sg"
   vpc_id = aws_default_vpc.default.id
 
   ingress {
-    description      = "Open 8080 to the internet"
-    from_port        = 8080
-    to_port          = 8080
+    description      = "Open 80 to the internet"
+    from_port        = 80
+    to_port          = 80
     protocol         = "tcp"
     cidr_blocks      = ["0.0.0.0/0"]
     ipv6_cidr_blocks = ["::/0"]
-  }
-
-  ingress {
-    description      = "Allow members of this security group to talk to port 27017"
-    from_port        = 27017
-    to_port          = 27017
-    protocol         = "tcp"
-    self             = true
   }
 
   egress {
@@ -50,6 +62,79 @@ resource "aws_security_group" "histomics_sg" {
     protocol         = "-1"
     cidr_blocks      = ["0.0.0.0/0"]
     ipv6_cidr_blocks = ["::/0"]
+  }
+}
+
+resource "aws_security_group" "histomics_sg" {
+  name = "histomics-sg"
+
+  vpc_id = aws_default_vpc.default.id
+
+  ingress {
+    description = "Allow members of this security group to talk to port 27017"
+    from_port   = 27017
+    to_port     = 27017
+    protocol    = "tcp"
+    self        = true
+  }
+
+  ingress {
+    description     = "Allow load balancer SG to talk to port 8080"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lb_sg.id]
+  }
+
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+}
+
+resource "aws_lb" "ecs_lb" {
+  name               = "ecs-lb"
+  internal           = false
+  load_balancer_type = "application"
+  subnets            = ["subnet-08528e25501eede26", "subnet-04155544b5a3fdf94"] # TODO don't hardcode
+  security_groups    = [aws_security_group.lb_sg.id]
+}
+
+resource "aws_efs_mount_target" "assetstore_az1" {
+  file_system_id  = aws_efs_file_system.assetstore_fs.id
+  subnet_id       = "subnet-08528e25501eede26" # TODO don't hardcode
+  security_groups = [aws_security_group.efs_mount_target_sg.id]
+}
+
+resource "aws_efs_mount_target" "assetstore_az2" {
+  file_system_id  = aws_efs_file_system.assetstore_fs.id
+  subnet_id       = "subnet-04155544b5a3fdf94" # TODO don't hardcode
+  security_groups = [aws_security_group.efs_mount_target_sg.id]
+}
+
+resource "aws_lb_target_group" "ecs_target_group" {
+  name        = "ecs-target-group"
+  port        = 8080
+  protocol    = "HTTP"
+  vpc_id      = aws_default_vpc.default.id
+  target_type = "ip"
+
+  health_check {
+    path = "/"
+  }
+}
+
+resource "aws_lb_listener" "ecs_lb_listener" {
+  load_balancer_arn = aws_lb.ecs_lb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    target_group_arn = aws_lb_target_group.ecs_target_group.arn
+    type             = "forward"
   }
 }
 
@@ -66,11 +151,11 @@ resource "aws_ecs_task_definition" "mongo_task" {
   execution_role_arn       = "arn:aws:iam::951496264182:role/ecsTaskExecutionRole" # TODO terraform this
   container_definitions = jsonencode([
     {
-      name       = "mongo-service"
-      image      = "mongo:latest"
-      cpu        = 2048
-      memory     = 8192
-      essential  = true
+      name      = "mongo-service"
+      image     = "mongo:latest"
+      cpu       = 2048
+      memory    = 8192
+      essential = true
       portMappings = [
         {
           name          = "mongod"
@@ -156,6 +241,10 @@ resource "aws_ecs_task_definition" "histomics_task" {
 
   volume {
     name = "assetstore"
+
+    efs_volume_configuration {
+      file_system_id = aws_efs_file_system.assetstore_fs.id
+    }
   }
 }
 
@@ -163,7 +252,7 @@ resource "aws_ecs_service" "histomics_service" {
   name            = "histomics-service"
   cluster         = aws_ecs_cluster.histomics_cluster.id
   task_definition = aws_ecs_task_definition.histomics_task.arn
-  desired_count   = 1
+  desired_count   = 2
   depends_on      = [aws_ecs_task_definition.histomics_task, aws_ecs_task_definition.mongo_task]
   launch_type     = "FARGATE"
 
@@ -176,6 +265,12 @@ resource "aws_ecs_service" "histomics_service" {
     assign_public_ip = true
     security_groups  = [aws_security_group.histomics_sg.id]
     subnets          = ["subnet-08528e25501eede26"] # TODO don't hardcode
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.ecs_target_group.arn
+    container_name   = "histomics-server"
+    container_port   = 8080
   }
 }
 
