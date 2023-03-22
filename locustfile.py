@@ -7,7 +7,8 @@ class HistomicsUser(HttpUser):
 
     def on_start(self):
         self.client.base_url = f"{self.host}/api/v1/"
-        target_folder = self.client.get("folder?text=Data").json()
+        target_collection = self.client.get("collection").json()[0]
+        target_folder = self.client.get(f"folder?parentType=collection&parentId={target_collection['_id']}").json()
         if len(target_folder) == 0:
             raise Exception("Server must be populated. See README.md.")
         self.target_items = self.client.get(
