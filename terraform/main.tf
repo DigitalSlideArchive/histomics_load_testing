@@ -8,7 +8,10 @@ resource "aws_default_vpc" "default" {
   }
 }
 
-resource "aws_efs_file_system" "assetstore_fs" {
+resource "aws_efs_file_system" "assetstore" {
+}
+
+resource "aws_efs_file_system" "mongo" {
 }
 
 # TODO grab or import default subnets
@@ -103,14 +106,26 @@ resource "aws_lb" "ecs_lb" {
   security_groups    = [aws_security_group.lb_sg.id]
 }
 
-resource "aws_efs_mount_target" "assetstore_az1" {
-  file_system_id  = aws_efs_file_system.assetstore_fs.id
+resource "aws_efs_mount_target" "mount_target_assetstore_az1" {
+  file_system_id  = aws_efs_file_system.assetstore.id
   subnet_id       = "subnet-08528e25501eede26" # TODO don't hardcode
   security_groups = [aws_security_group.efs_mount_target_sg.id]
 }
 
-resource "aws_efs_mount_target" "assetstore_az2" {
-  file_system_id  = aws_efs_file_system.assetstore_fs.id
+resource "aws_efs_mount_target" "mount_target_assetstore_az2" {
+  file_system_id  = aws_efs_file_system.assetstore.id
+  subnet_id       = "subnet-04155544b5a3fdf94" # TODO don't hardcode
+  security_groups = [aws_security_group.efs_mount_target_sg.id]
+}
+
+resource "aws_efs_mount_target" "mount_target_mongo_az1" {
+  file_system_id  = aws_efs_file_system.mongo.id
+  subnet_id       = "subnet-08528e25501eede26" # TODO don't hardcode
+  security_groups = [aws_security_group.efs_mount_target_sg.id]
+}
+
+resource "aws_efs_mount_target" "mount_target_mongo_az2" {
+  file_system_id  = aws_efs_file_system.mongo.id
   subnet_id       = "subnet-04155544b5a3fdf94" # TODO don't hardcode
   security_groups = [aws_security_group.efs_mount_target_sg.id]
 }
@@ -183,6 +198,10 @@ resource "aws_ecs_task_definition" "mongo_task" {
 
   volume {
     name = "mongo-data"
+
+    efs_volume_configuration {
+      file_system_id = aws_efs_file_system.mongo.id
+    }
   }
 }
 
@@ -243,7 +262,7 @@ resource "aws_ecs_task_definition" "histomics_task" {
     name = "assetstore"
 
     efs_volume_configuration {
-      file_system_id = aws_efs_file_system.assetstore_fs.id
+      file_system_id = aws_efs_file_system.assetstore.id
     }
   }
 }
