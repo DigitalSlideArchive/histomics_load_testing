@@ -14,8 +14,8 @@ RUN cd /opt && \
     git checkout honor-the-wsgi && \
     pip install --no-cache-dir -e .[analysis]
 
-RUN pip install gunicorn
-
+# TODO install slicer_cli_web plugin
+RUN pip install gunicorn girder-worker[girder] girder-slicer-cli-web[girder]
 
 WORKDIR /opt/HistomicsUI
 
