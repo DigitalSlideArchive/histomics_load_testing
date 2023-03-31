@@ -2,6 +2,8 @@ provider "aws" {
   region = "us-east-1"
 }
 
+data "aws_region" "current" {}
+
 resource "aws_default_vpc" "default" {
   tags = {
     Name = "Default VPC"
@@ -240,7 +242,7 @@ resource "aws_ecs_task_definition" "histomics_task" {
           },
           {
             name = "GIRDER_BROKER_URI"
-            value = aws_mq_broker.jobs_queue.instances.0.endpoints.0
+            value = "amqps://histomics:${random_password.mq_password.result}@${aws_mq_broker.jobs_queue.id}.mq.${data.aws_region.current.name}.amazonaws.com:5671"
           }
         ],
         mountPoints = [
@@ -331,7 +333,7 @@ resource "aws_ecs_service" "mongo_service" {
 
 resource "random_password" "mq_password" {
   length  = 20
-  special = false   # Not sure whether specials work well due to endpoint encoding
+  special = false   # So we don't have to urlencode this further down
 }
 
 resource "aws_security_group" "mq_broker_sg" {
@@ -394,7 +396,7 @@ resource "aws_ecs_task_definition" "histomics_worker_task" {
           },
           {
             name = "GIRDER_WORKER_BROKER"
-            value = aws_mq_broker.jobs_queue.instances.0.endpoints.0
+            value = "amqps://histomics:${random_password.mq_password.result}@${aws_mq_broker.jobs_queue.id}.mq.${data.aws_region.current.name}.amazonaws.com:5671"
           }
         ],
         mountPoints = [
