@@ -375,7 +375,7 @@ resource "aws_cloudwatch_log_group" "histomics_worker_logs" {
 
 resource "aws_ecs_task_definition" "histomics_worker_task" {
   family                   = "histomics-worker-task"
-  network_mode             = "awsvpc"
+  network_mode             = "bridge"
   cpu                      = 1024
   memory                   = 1024
   execution_role_arn       = "arn:aws:iam::951496264182:role/ecsTaskExecutionRole" # TODO terraform this
