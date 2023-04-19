@@ -218,7 +218,7 @@ resource "aws_ecs_task_definition" "histomics_task" {
     [
       {
         name  = "histomics-server"
-        image = "zachmullen/histomics-load-test@sha256:dc75f4d4dfce297c2d0c37949d82d523ecaf9ec6d5219d497214371efb1a97e1"
+        image = "zachmullen/histomics-load-test@sha256:5e0e5f82b685455005d11be91616c7f9381ab59938760f87a6ccde032d4d8f33"
         entryPoint = [
           "gunicorn",
           "histomicsui.wsgi:app",
@@ -241,7 +241,7 @@ resource "aws_ecs_task_definition" "histomics_task" {
             value = "mongodb://mongo-service:27017/girder"
           },
           {
-            name = "GIRDER_BROKER_URI"
+            name  = "GIRDER_BROKER_URI"
             value = "amqps://histomics:${random_password.mq_password.result}@${aws_mq_broker.jobs_queue.id}.mq.${data.aws_region.current.name}.amazonaws.com:5671"
           }
         ],
@@ -287,7 +287,7 @@ resource "aws_ecs_service" "histomics_service" {
   }
 
   network_configuration {
-    assign_public_ip = true
+    assign_public_ip = true  # this should probably be false and we should add a NAT instead
     security_groups  = [aws_security_group.histomics_sg.id]
     subnets          = ["subnet-08528e25501eede26"] # TODO don't hardcode
   }
@@ -323,7 +323,7 @@ resource "aws_ecs_service" "mongo_service" {
   launch_type   = "FARGATE"
 
   network_configuration {
-    assign_public_ip = true
+    assign_public_ip = true  # this should probably be false and we should add a NAT instead
     security_groups  = [aws_security_group.histomics_sg.id]
     subnets          = ["subnet-08528e25501eede26"] # TODO don't hardcode
   }
@@ -333,7 +333,7 @@ resource "aws_ecs_service" "mongo_service" {
 
 resource "random_password" "mq_password" {
   length  = 20
-  special = false   # So we don't have to urlencode this further down
+  special = false # So we don't have to urlencode this further down
 }
 
 resource "aws_security_group" "mq_broker_sg" {
@@ -369,16 +369,15 @@ resource "aws_cloudwatch_log_group" "histomics_worker_logs" {
 
 resource "aws_ecs_task_definition" "histomics_worker_task" {
   family                   = "histomics-worker-task"
-  requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = 4096
-  memory                   = 8192
+  cpu                      = 1024
+  memory                   = 1024
   execution_role_arn       = "arn:aws:iam::951496264182:role/ecsTaskExecutionRole" # TODO terraform this
   container_definitions = jsonencode(
     [
       {
         name  = "histomics-worker"
-        image = "zachmullen/histomics-worker"
+        image = "zachmullen/histomics-worker@sha256:bafffe5c08a282925da2560d1af3b64020c0d085d42ac81793645d7d1b1ccaf9"
         entryPoint = [
           "girder-worker",
           "--concurrency=4",
@@ -386,8 +385,8 @@ resource "aws_ecs_task_definition" "histomics_worker_task" {
           "-Ofair",
           "--prefetch-multiplier=1"
         ],
-        cpu       = 4096
-        memory    = 8192
+        cpu       = 1024
+        memory    = 1024
         essential = true
         environment = [
           {
@@ -395,7 +394,7 @@ resource "aws_ecs_task_definition" "histomics_worker_task" {
             value = "true"
           },
           {
-            name = "GIRDER_WORKER_BROKER"
+            name  = "GIRDER_WORKER_BROKER"
             value = "amqps://histomics:${random_password.mq_password.result}@${aws_mq_broker.jobs_queue.id}.mq.${data.aws_region.current.name}.amazonaws.com:5671"
           }
         ],
@@ -404,6 +403,10 @@ resource "aws_ecs_task_definition" "histomics_worker_task" {
             sourceVolume  = "assetstore"
             containerPath = "/assetstore"
             readOnly      = false
+          },
+          {
+            sourceVolume  = "bindMountHost",
+            containerPath = "/var/run/docker.sock"
           }
         ]
         logConfiguration = {
@@ -425,6 +428,11 @@ resource "aws_ecs_task_definition" "histomics_worker_task" {
       file_system_id = aws_efs_file_system.assetstore.id
     }
   }
+
+  volume {
+    name = "bindMountHost"
+    host_path = "/var/run/docker.sock"
+  }
 }
 
 resource "aws_ecs_service" "worker_service" {
@@ -432,7 +440,7 @@ resource "aws_ecs_service" "worker_service" {
   cluster         = aws_ecs_cluster.histomics_cluster.id
   task_definition = aws_ecs_task_definition.histomics_worker_task.arn
   desired_count   = 1
-  launch_type     = "FARGATE"
+  launch_type     = "EC2"
 
   service_connect_configuration {
     enabled   = true
@@ -440,7 +448,6 @@ resource "aws_ecs_service" "worker_service" {
   }
 
   network_configuration {
-    assign_public_ip = true
     security_groups  = [aws_security_group.histomics_worker_sg.id]
     subnets          = ["subnet-08528e25501eede26"] # TODO don't hardcode
   }
@@ -452,9 +459,27 @@ resource "aws_security_group" "histomics_worker_sg" {
   vpc_id = aws_default_vpc.default.id
 
   egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
+}
+
+resource "aws_iam_instance_profile" "worker" {
+  name = "worker-instance-profile"
+  role = "ecsTaskExecutionRole"  # TODO don't hardcode
+}
+
+resource "aws_instance" "worker" {
+  ami           = "ami-0c76be34ffbfb0b14"
+  instance_type = "t3.medium"
+  count = 1
+  vpc_security_group_ids = [aws_security_group.histomics_worker_sg.id]
+  user_data = <<EOF
+#!/bin/bash
+echo ECS_CLUSTER=histomics >> /etc/ecs/ecs.config
+EOF
+  subnet_id = "subnet-08528e25501eede26"  # TODO don't hardcode
+  iam_instance_profile = aws_iam_instance_profile.worker.name
 }
