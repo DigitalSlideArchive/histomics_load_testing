@@ -218,7 +218,7 @@ resource "aws_ecs_task_definition" "histomics_task" {
     [
       {
         name  = "histomics-server"
-        image = "zachmullen/histomics-load-test@sha256:5e0e5f82b685455005d11be91616c7f9381ab59938760f87a6ccde032d4d8f33"
+        image = "zachmullen/histomics-load-test@sha256:27199584248eba32a867f62c88700b4b86c2d4732b70625d8e447f5d012e87c7"
         entryPoint = [
           "gunicorn",
           "histomicsui.wsgi:app",
@@ -242,6 +242,12 @@ resource "aws_ecs_task_definition" "histomics_task" {
           },
           {
             name  = "GIRDER_BROKER_URI"
+            value = "amqps://histomics:${random_password.mq_password.result}@${aws_mq_broker.jobs_queue.id}.mq.${data.aws_region.current.name}.amazonaws.com:5671"
+          },
+          {
+            # TODO make our wsgi module use the same env var name as above.
+            # Necessary due to direct use of task.delay() in slicer_cli_web.
+            name  = "GIRDER_WORKER_BROKER"
             value = "amqps://histomics:${random_password.mq_password.result}@${aws_mq_broker.jobs_queue.id}.mq.${data.aws_region.current.name}.amazonaws.com:5671"
           }
         ],
