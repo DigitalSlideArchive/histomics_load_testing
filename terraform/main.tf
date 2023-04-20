@@ -218,13 +218,15 @@ resource "aws_ecs_task_definition" "histomics_task" {
     [
       {
         name  = "histomics-server"
-        image = "zachmullen/histomics-load-test@sha256:27199584248eba32a867f62c88700b4b86c2d4732b70625d8e447f5d012e87c7"
+        image = "zachmullen/histomics-load-test@sha256:bcc23ed95171f08613326e5835e0e8801221dbc71e99a87f2fc5a3fb5f13bdb4"
         entryPoint = [
           "gunicorn",
           "histomicsui.wsgi:app",
           "--bind=0.0.0.0:8080",
           "--workers=4",
-          "--preload"
+          "--preload",
+          "-k",
+          "gevent"
         ],
         cpu       = 4096
         memory    = 8192

@@ -20,7 +20,7 @@ RUN cd /opt && \
     git checkout upload-task-specs-from-client && \
     pip install --no-cache-dir -e .[girder]
 
-RUN pip install gunicorn girder-worker[girder]
+RUN pip install gevent gunicorn girder-worker[girder]
 
 WORKDIR /opt/HistomicsUI
 
