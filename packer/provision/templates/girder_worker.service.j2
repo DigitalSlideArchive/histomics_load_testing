@@ -1,0 +1,19 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Girder Worker Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+Environment=C_FORCE_ROOT=true
+Environment=GW_DIRECT_PATHS=true
+EnvironmentFile=/etc/girder_worker.env
+ExecStart={{ girder_worker_executable }} --concurrency=4 -l info -Ofair --prefetch-multiplier=1
+ExecStop={{ celery_executable }} multi stopwait worker
+Restart=on-failure
+RestartSec=15s
+
+[Install]
+WantedBy=multi-user.target

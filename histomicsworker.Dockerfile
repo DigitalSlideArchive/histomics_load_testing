@@ -2,5 +2,5 @@ FROM python:3.10
 
 RUN curl -sSL https://get.docker.com/ | sh
 
-RUN pip install girder-slicer-cli-web[girder]
+RUN pip install girder-slicer-cli-web[worker]
 ENV C_FORCE_ROOT=true
