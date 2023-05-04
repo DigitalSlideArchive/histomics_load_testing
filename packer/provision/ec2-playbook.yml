@@ -1,0 +1,71 @@
+---
+- hosts: all
+  vars:
+    girder_worker_virtualenv: "/opt/worker_venv"
+    girder_worker_user: "{{ ansible_user_id }}"
+    girder_worker_executable: "{{ girder_worker_virtualenv }}/bin/girder-worker"
+    celery_executable: "{{ girder_worker_virtualenv }}/bin/celery"
+
+  tasks:
+    - name: Install Girder Worker system dependencies
+      apt:
+        name: "{{ item }}"
+        update_cache: true
+      become: yes
+      become_user: root
+      with_items:
+        - python3-pip
+        - virtualenv
+
+    - block:
+      - name: Add Docker GPG apt Key
+        apt_key:
+          url: https://download.docker.com/linux/ubuntu/gpg
+          state: present
+
+      - name: Add Docker Repository
+        apt_repository:
+          repo: deb https://download.docker.com/linux/ubuntu focal stable
+          state: present
+
+      - name: Update apt and install docker-ce
+        apt:
+          name: docker-ce
+          state: latest
+          update_cache: true
+      become: yes
+      become_user: root
+
+    - name: Install Girder Worker with Slicer CLI Web
+      pip:
+        name: "girder-slicer-cli-web[worker]"
+        state: latest
+        virtualenv: "{{ girder_worker_virtualenv }}"
+      become: yes
+      become_user: root
+
+    - name: Downgrade urllib3 (docker-py does not yet support urllib3>=2)
+      pip:
+        name: "urllib3<2"
+        state: latest
+        virtualenv: "{{ girder_worker_virtualenv }}"
+      become: yes
+      become_user: root
+
+    - block:
+      - name: Install systemd service
+        template:
+          src: "girder_worker.service.j2"
+          dest: "/etc/systemd/system/girder_worker.service"
+
+      - name: Reload systemd units
+        systemd:
+          name: girder_worker
+          daemon_reload: yes
+
+      - name: Enable/Disable Girder service on boot
+        service:
+          name: girder_worker
+          enabled: yes
+      become: yes
+      become_user: root

@@ -2,6 +2,12 @@ provider "aws" {
   region = "us-east-1"
 }
 
+data "aws_region" "current" {}
+
+variable "ssh_public_key" {
+  type = string
+}
+
 resource "aws_default_vpc" "default" {
   tags = {
     Name = "Default VPC"
@@ -35,7 +41,7 @@ resource "aws_security_group" "efs_mount_target_sg" {
     from_port   = 2049
     to_port     = 2049
     protocol    = "tcp"
-    cidr_blocks = ["172.31.0.0/20", "172.31.80.0/20"] # TODO don't hardcode (these are the CIDR blocks of our two subnets)
+    cidr_blocks = [aws_default_vpc.default.cidr_block]
   }
 
   egress {
@@ -216,13 +222,14 @@ resource "aws_ecs_task_definition" "histomics_task" {
     [
       {
         name  = "histomics-server"
-        image = "zachmullen/histomics-load-test"
+        image = "zachmullen/histomics-load-test@sha256:4079847a9924bc6fd49ab1eb300dab69a4b8476bdcfa5d1eb7872b583f5a4576"
         entryPoint = [
           "gunicorn",
           "histomicsui.wsgi:app",
           "--bind=0.0.0.0:8080",
           "--workers=4",
-          "--preload"
+          "--preload",
+          "--timeout=7200"
         ],
         cpu       = 4096
         memory    = 8192
@@ -237,6 +244,16 @@ resource "aws_ecs_task_definition" "histomics_task" {
           {
             name  = "GIRDER_MONGO_URI"
             value = "mongodb://mongo-service:27017/girder"
+          },
+          {
+            name  = "GIRDER_BROKER_URI"
+            value = "amqps://histomics:${random_password.mq_password.result}@${aws_mq_broker.jobs_queue.id}.mq.${data.aws_region.current.name}.amazonaws.com:5671"
+          },
+          {
+            # TODO make our wsgi module use the same env var name as above.
+            # Necessary due to direct use of task.delay() in slicer_cli_web.
+            name  = "GIRDER_WORKER_BROKER"
+            value = "amqps://histomics:${random_password.mq_password.result}@${aws_mq_broker.jobs_queue.id}.mq.${data.aws_region.current.name}.amazonaws.com:5671"
           }
         ],
         mountPoints = [
@@ -281,7 +298,7 @@ resource "aws_ecs_service" "histomics_service" {
   }
 
   network_configuration {
-    assign_public_ip = true
+    assign_public_ip = true # this should probably be false and we should add a NAT instead
     security_groups  = [aws_security_group.histomics_sg.id]
     subnets          = ["subnet-08528e25501eede26"] # TODO don't hardcode
   }
@@ -317,8 +334,82 @@ resource "aws_ecs_service" "mongo_service" {
   launch_type   = "FARGATE"
 
   network_configuration {
-    assign_public_ip = true
+    assign_public_ip = true # this should probably be false and we should add a NAT instead
     security_groups  = [aws_security_group.histomics_sg.id]
     subnets          = ["subnet-08528e25501eede26"] # TODO don't hardcode
+  }
+}
+
+### Message queue
+
+resource "random_password" "mq_password" {
+  length  = 20
+  special = false # So we don't have to urlencode this further down
+}
+
+resource "aws_security_group" "mq_broker_sg" {
+  name = "mq-broker-sg"
+
+  ingress {
+    from_port   = 5671
+    to_port     = 5671
+    protocol    = "tcp"
+    cidr_blocks = [aws_default_vpc.default.cidr_block]
+  }
+}
+
+resource "aws_mq_broker" "jobs_queue" {
+  broker_name = "jobs_queue"
+
+  engine_type        = "RabbitMQ"
+  engine_version     = "3.10.10"
+  host_instance_type = "mq.t3.micro"
+  security_groups    = [aws_security_group.mq_broker_sg.id]
+
+  user {
+    username = "histomics"
+    password = random_password.mq_password.result
+  }
+}
+
+### Worker(s)
+
+resource "aws_security_group" "histomics_worker_sg" {
+  name = "histomics-worker-sg"
+
+  vpc_id = aws_default_vpc.default.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_iam_instance_profile" "worker" {
+  name = "worker-instance-profile"
+  role = "ecsTaskExecutionRole" # TODO don't hardcode
+}
+
+resource "aws_key_pair" "worker_ec2_ssh_key" {
+  public_key = var.ssh_public_key
+}
+
+resource "aws_instance" "worker" {
+  ami                    = "ami-0175a989eaa84f433"
+  instance_type          = "t3.xlarge"
+  count                  = 1
+  vpc_security_group_ids = [aws_security_group.histomics_worker_sg.id]
+  user_data              = <<EOF
+#!/bin/bash
+echo 'GIRDER_WORKER_BROKER=amqps://histomics:${random_password.mq_password.result}@${aws_mq_broker.jobs_queue.id}.mq.${data.aws_region.current.name}.amazonaws.com:5671' >> /etc/girder_worker.env
+EOF
+  subnet_id              = "subnet-08528e25501eede26" # TODO don't hardcode
+  iam_instance_profile   = aws_iam_instance_profile.worker.name
+  key_name               = aws_key_pair.worker_ec2_ssh_key.key_name
+
+  root_block_device {
+    volume_size = 256
   }
 }
