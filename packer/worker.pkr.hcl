@@ -19,7 +19,7 @@ build {
   name = "worker-release"
 
   source "source.amazon-ebs.histomics-worker" {
-    name            = "worker-release"
+    name = "worker-release"
   }
 
   provisioner "ansible" {
