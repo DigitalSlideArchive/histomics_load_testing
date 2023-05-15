@@ -8,6 +8,16 @@ variable "ssh_public_key" {
   type = string
 }
 
+variable "sentry_backend_dsn" {
+  type    = string
+  default = ""
+}
+
+variable "sentry_frontend_dsn" {
+  type    = string
+  default = ""
+}
+
 variable "domain_name" {
   type    = string
   default = "histomics-demo.com"
@@ -291,7 +301,7 @@ resource "aws_ecs_task_definition" "histomics_task" {
     [
       {
         name  = "histomics-server"
-        image = "zachmullen/histomics-load-test@sha256:4079847a9924bc6fd49ab1eb300dab69a4b8476bdcfa5d1eb7872b583f5a4576"
+        image = "zachmullen/histomics-load-test@sha256:f0d364360507cbd8be0f4e2aac709eab3eeb4154d78a5ce7dd2c7ca9592c53be"
         entryPoint = [
           "gunicorn",
           "histomicsui.wsgi:app",
@@ -323,6 +333,14 @@ resource "aws_ecs_task_definition" "histomics_task" {
             # Necessary due to direct use of task.delay() in slicer_cli_web.
             name  = "GIRDER_WORKER_BROKER"
             value = "amqps://histomics:${random_password.mq_password.result}@${aws_mq_broker.jobs_queue.id}.mq.${data.aws_region.current.name}.amazonaws.com:5671"
+          },
+          {
+            name  = "SENTRY_BACKEND_DSN"
+            value = var.sentry_backend_dsn
+          },
+          {
+            name  = "SENTRY_FRONTEND_DSN"
+            value = var.sentry_frontend_dsn
           }
         ],
         mountPoints = [
