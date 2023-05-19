@@ -44,6 +44,21 @@
       become: yes
       become_user: root
 
+    - name: Git clone HistomicsUI branch
+      git:
+        repo: https://github.com/DigitalSlideArchive/HistomicsUI
+        dest: /opt/HistomicsUI
+        version: honor-the-wsgi
+      become: yes
+      become_user: root
+
+    - name: Install package from local source
+      pip:
+        name: /opt/HistomicsUI
+        state: present
+      become: yes
+      become_user: root
+
     - name: Downgrade urllib3 (docker-py does not yet support urllib3>=2)
       pip:
         name: "urllib3<2"
