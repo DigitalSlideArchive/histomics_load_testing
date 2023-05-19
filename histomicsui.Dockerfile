@@ -11,7 +11,7 @@ RUN pip install large-image[sources] --no-cache-dir --find-links https://girder.
 RUN cd /opt && \
     git clone https://github.com/DigitalSlideArchive/HistomicsUI && \
     cd /opt/HistomicsUI && \
-    git checkout honor-the-wsgi && \
+    git checkout annotation-processing-refactor && \
     pip install --no-cache-dir -e .[analysis]
 
 RUN cd /opt && \
