@@ -9,6 +9,7 @@ User=root
 Group=root
 Environment=C_FORCE_ROOT=true
 Environment=GW_DIRECT_PATHS=true
+Environment=GIRDER_MAX_CURSOR_TIMEOUT_MS=3600000
 EnvironmentFile=/etc/girder_worker.env
 ExecStart={{ girder_worker_executable }} --concurrency=4 -l info -Ofair --prefetch-multiplier=1
 ExecStop={{ celery_executable }} multi stopwait worker

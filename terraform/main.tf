@@ -255,7 +255,7 @@ resource "aws_ecs_task_definition" "histomics_task" {
         environment = [
           {
             name  = "GIRDER_MONGO_URI"
-            value = "mongodb://histomics:${random_password.mongo_password.result}@${aws_docdb_cluster.histomics.endpoint}:${aws_docdb_cluster.histomics.port}/girder"
+            value = local.mongodb_uri
           },
           {
             name  = "GIRDER_BROKER_URI"
@@ -274,6 +274,10 @@ resource "aws_ecs_task_definition" "histomics_task" {
           {
             name  = "SENTRY_FRONTEND_DSN"
             value = var.sentry_frontend_dsn
+          },
+          {
+            name = "GIRDER_MAX_CURSOR_TIMEOUT_MS"
+            value = "3600000"  # DocumentDB does not support no_timeout cursors
           }
         ],
         mountPoints = [
@@ -366,11 +370,15 @@ resource "aws_docdb_cluster" "histomics" {
   vpc_security_group_ids       = [aws_security_group.mongo_sg.id]
 }
 
-resource "aws_docdb_cluster_instance" "example" {
+resource "aws_docdb_cluster_instance" "histomics" {
   count              = 1
   identifier         = "histomics-cluster-instance-${count.index}"
   cluster_identifier = aws_docdb_cluster.histomics.id
-  instance_class     = "db.r5.large"
+  instance_class     = "db.r6g.large"
+}
+
+locals {
+  mongodb_uri = "mongodb://histomics:${random_password.mongo_password.result}@${aws_docdb_cluster.histomics.endpoint}:${aws_docdb_cluster.histomics.port}/girder?tls=true&tlsInsecure=true&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false"
 }
 
 ### Message queue
@@ -437,7 +445,7 @@ resource "aws_instance" "worker" {
   user_data              = <<EOF
 #!/bin/bash
 echo 'GIRDER_WORKER_BROKER=amqps://histomics:${random_password.mq_password.result}@${aws_mq_broker.jobs_queue.id}.mq.${data.aws_region.current.name}.amazonaws.com:5671' >> /etc/girder_worker.env
-echo 'GIRDER_MONGO_URI=mongodb://histomics:${random_password.mongo_password.result}@${aws_docdb_cluster.histomics.endpoint}:${aws_docdb_cluster.histomics.port}/girder' >> /etc/girder_worker.env
+echo 'GIRDER_MONGO_URI=${local.mongodb_uri}' >> /etc/girder_worker.env
 EOF
   subnet_id              = "subnet-08528e25501eede26" # TODO don't hardcode
   iam_instance_profile   = aws_iam_instance_profile.worker.name
