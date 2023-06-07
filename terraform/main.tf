@@ -234,7 +234,7 @@ resource "aws_ecs_task_definition" "histomics_task" {
     [
       {
         name  = "histomics-server"
-        image = "zachmullen/histomics-load-test@sha256:f0d364360507cbd8be0f4e2aac709eab3eeb4154d78a5ce7dd2c7ca9592c53be"
+        image = "zachmullen/histomics-load-test@sha256:7515018984053e5681c5046de1d1834cddfe8bbdde41253f47d82144560de55b"
         entryPoint = [
           "gunicorn",
           "histomicsui.wsgi:app",
@@ -438,12 +438,13 @@ resource "aws_key_pair" "worker_ec2_ssh_key" {
 }
 
 resource "aws_instance" "worker" {
-  ami                    = "ami-0c067054e19ab8035"
+  ami                    = "ami-043f6d5ead688115a"
   instance_type          = "t3.xlarge"
   count                  = 1
   vpc_security_group_ids = [aws_security_group.histomics_worker_sg.id]
   user_data              = <<EOF
 #!/bin/bash
+echo 'mount -t efs ${aws_efs_file_system.assetstore.id}:/ /assetstore' >> /etc/mount_assetstore.sh
 echo 'GIRDER_WORKER_BROKER=amqps://histomics:${random_password.mq_password.result}@${aws_mq_broker.jobs_queue.id}.mq.${data.aws_region.current.name}.amazonaws.com:5671' >> /etc/girder_worker.env
 echo 'GIRDER_MONGO_URI=${local.mongodb_uri}' >> /etc/girder_worker.env
 EOF

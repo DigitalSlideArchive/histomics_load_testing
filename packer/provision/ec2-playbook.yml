@@ -16,6 +16,24 @@
       with_items:
         - python3-pip
         - virtualenv
+        - binutils  # required to build & install efs mount util from source
+
+    - name: Clone amazon-efs-utils repository
+      git:
+        repo: https://github.com/aws/efs-utils.git
+        dest: /tmp/efs-utils
+
+    - name: Build amazon-efs-utils
+      command: /tmp/efs-utils/build-deb.sh
+      args:
+        chdir: /tmp/efs-utils
+      become: yes
+      become_user: root
+
+    - name: Install amazon-efs-utils
+      command: /bin/bash -c 'apt-get -y install /tmp/efs-utils/build/amazon-efs-utils*deb'
+      become: yes
+      become_user: root
 
     - block:
       - name: Add Docker GPG apt Key
@@ -65,6 +83,25 @@
         name: "urllib3<2"
         state: latest
         virtualenv: "{{ girder_worker_virtualenv }}"
+      become: yes
+      become_user: root
+
+    - name: Downgrade requests (newer versions break girder-client)
+      pip:
+        name: "requests==2.26.0"
+        state: latest
+        virtualenv: "{{ girder_worker_virtualenv }}"
+      become: yes
+      become_user: root
+
+    # TODO EFS mount -- must install from source
+    # https://docs.aws.amazon.com/efs/latest/ug/installing-amazon-efs-utils.html#installing-other-distro
+
+    - name: Create mount point for assetstore
+      ansible.builtin.file:
+        path: /assetstore
+        state: directory
+        mode: '0755'
       become: yes
       become_user: root
 
