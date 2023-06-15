@@ -94,9 +94,6 @@
       become: yes
       become_user: root
 
-    # TODO EFS mount -- must install from source
-    # https://docs.aws.amazon.com/efs/latest/ug/installing-amazon-efs-utils.html#installing-other-distro
-
     - name: Create mount point for assetstore
       ansible.builtin.file:
         path: /assetstore
