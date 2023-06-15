@@ -32,9 +32,6 @@ resource "aws_default_vpc" "default" {
 resource "aws_efs_file_system" "assetstore" {
 }
 
-resource "aws_efs_file_system" "mongo" {
-}
-
 # TODO grab or import default subnets
 
 resource "aws_service_discovery_http_namespace" "internal" {
@@ -43,10 +40,6 @@ resource "aws_service_discovery_http_namespace" "internal" {
 
 resource "aws_cloudwatch_log_group" "histomics_logs" {
   name = "histomics-logs"
-}
-
-resource "aws_cloudwatch_log_group" "mongo_logs" {
-  name = "mongo-logs"
 }
 
 resource "aws_security_group" "efs_mount_target_sg" {
@@ -148,18 +141,6 @@ resource "aws_efs_mount_target" "mount_target_assetstore_az2" {
   security_groups = [aws_security_group.efs_mount_target_sg.id]
 }
 
-resource "aws_efs_mount_target" "mount_target_mongo_az1" {
-  file_system_id  = aws_efs_file_system.mongo.id
-  subnet_id       = "subnet-08528e25501eede26" # TODO don't hardcode
-  security_groups = [aws_security_group.efs_mount_target_sg.id]
-}
-
-resource "aws_efs_mount_target" "mount_target_mongo_az2" {
-  file_system_id  = aws_efs_file_system.mongo.id
-  subnet_id       = "subnet-04155544b5a3fdf94" # TODO don't hardcode
-  security_groups = [aws_security_group.efs_mount_target_sg.id]
-}
-
 resource "aws_lb_target_group" "ecs_target_group" {
   name        = "ecs-target-group"
   port        = 8080
@@ -242,54 +223,6 @@ resource "aws_ecs_cluster" "histomics_cluster" {
   name = "histomics"
 }
 
-resource "aws_ecs_task_definition" "mongo_task" {
-  family                   = "mongo-task"
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
-  cpu                      = 2048
-  memory                   = 8192
-  execution_role_arn       = "arn:aws:iam::951496264182:role/ecsTaskExecutionRole" # TODO terraform this
-  container_definitions = jsonencode([
-    {
-      name      = "mongo-service"
-      image     = "mongo:latest"
-      cpu       = 2048
-      memory    = 8192
-      essential = true
-      portMappings = [
-        {
-          name          = "mongod"
-          containerPort = 27017
-          hostPort      = 27017
-        }
-      ],
-      mountPoints = [
-        {
-          sourceVolume  = "mongo-data"
-          containerPath = "/data/db"
-          readOnly      = false
-        }
-      ],
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.mongo_logs.id
-          awslogs-region        = "us-east-1"
-          awslogs-stream-prefix = "ecs"
-        }
-      }
-    }
-  ])
-
-  volume {
-    name = "mongo-data"
-
-    efs_volume_configuration {
-      file_system_id = aws_efs_file_system.mongo.id
-    }
-  }
-}
-
 resource "aws_ecs_task_definition" "histomics_task" {
   family                   = "histomics-task"
   requires_compatibilities = ["FARGATE"]
@@ -301,7 +234,7 @@ resource "aws_ecs_task_definition" "histomics_task" {
     [
       {
         name  = "histomics-server"
-        image = "zachmullen/histomics-load-test@sha256:f0d364360507cbd8be0f4e2aac709eab3eeb4154d78a5ce7dd2c7ca9592c53be"
+        image = "zachmullen/histomics-load-test@sha256:7515018984053e5681c5046de1d1834cddfe8bbdde41253f47d82144560de55b"
         entryPoint = [
           "gunicorn",
           "histomicsui.wsgi:app",
@@ -322,7 +255,7 @@ resource "aws_ecs_task_definition" "histomics_task" {
         environment = [
           {
             name  = "GIRDER_MONGO_URI"
-            value = "mongodb://mongo-service:27017/girder"
+            value = local.mongodb_uri
           },
           {
             name  = "GIRDER_BROKER_URI"
@@ -341,6 +274,10 @@ resource "aws_ecs_task_definition" "histomics_task" {
           {
             name  = "SENTRY_FRONTEND_DSN"
             value = var.sentry_frontend_dsn
+          },
+          {
+            name = "GIRDER_MAX_CURSOR_TIMEOUT_MS"
+            value = "3600000"  # DocumentDB does not support no_timeout cursors
           }
         ],
         mountPoints = [
@@ -376,7 +313,7 @@ resource "aws_ecs_service" "histomics_service" {
   cluster         = aws_ecs_cluster.histomics_cluster.id
   task_definition = aws_ecs_task_definition.histomics_task.arn
   desired_count   = 2
-  depends_on      = [aws_ecs_task_definition.histomics_task, aws_ecs_task_definition.mongo_task]
+  depends_on      = [aws_ecs_task_definition.histomics_task]
   launch_type     = "FARGATE"
 
   service_connect_configuration {
@@ -397,34 +334,51 @@ resource "aws_ecs_service" "histomics_service" {
   }
 }
 
-resource "aws_ecs_service" "mongo_service" {
-  name            = "mongo-service"
-  cluster         = aws_ecs_cluster.histomics_cluster.id
-  depends_on      = [aws_ecs_task_definition.mongo_task]
-  task_definition = aws_ecs_task_definition.mongo_task.arn
+### MongoDB
 
-  service_connect_configuration {
-    enabled   = true
-    namespace = aws_service_discovery_http_namespace.internal.arn
+resource "aws_security_group" "mongo_sg" {
+  name = "mongo-sg"
 
-    service {
-      port_name = "mongod"
-
-      client_alias {
-        port     = 27017
-        dns_name = "mongo-service"
-      }
-    }
+  ingress {
+    from_port       = 27017 # can't use `aws_docdb_cluster.histomics.port` as it would create a cycle
+    to_port         = 27017
+    protocol        = "tcp"
+    security_groups = [aws_security_group.histomics_worker_sg.id, aws_security_group.histomics_sg.id]
   }
 
-  desired_count = 1
-  launch_type   = "FARGATE"
-
-  network_configuration {
-    assign_public_ip = true # this should probably be false and we should add a NAT instead
-    security_groups  = [aws_security_group.histomics_sg.id]
-    subnets          = ["subnet-08528e25501eede26"] # TODO don't hardcode
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
+}
+
+resource "random_password" "mongo_password" {
+  length  = 20
+  special = false # So we don't have to urlencode this further down
+}
+
+resource "aws_docdb_cluster" "histomics" {
+  cluster_identifier           = "histomics"
+  engine_version               = "5.0.0"
+  master_username              = "histomics"
+  master_password              = random_password.mongo_password.result
+  backup_retention_period      = 5
+  preferred_backup_window      = "07:00-09:00"         # this is in UTC
+  preferred_maintenance_window = "wed:05:00-wed:07:00" # this is in UTC
+  vpc_security_group_ids       = [aws_security_group.mongo_sg.id]
+}
+
+resource "aws_docdb_cluster_instance" "histomics" {
+  count              = 1
+  identifier         = "histomics-cluster-instance-${count.index}"
+  cluster_identifier = aws_docdb_cluster.histomics.id
+  instance_class     = "db.r6g.large"
+}
+
+locals {
+  mongodb_uri = "mongodb://histomics:${random_password.mongo_password.result}@${aws_docdb_cluster.histomics.endpoint}:${aws_docdb_cluster.histomics.port}/girder?tls=true&tlsInsecure=true&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false"
 }
 
 ### Message queue
@@ -484,13 +438,15 @@ resource "aws_key_pair" "worker_ec2_ssh_key" {
 }
 
 resource "aws_instance" "worker" {
-  ami                    = "ami-0175a989eaa84f433"
+  ami                    = "ami-043f6d5ead688115a"
   instance_type          = "t3.xlarge"
   count                  = 1
   vpc_security_group_ids = [aws_security_group.histomics_worker_sg.id]
   user_data              = <<EOF
 #!/bin/bash
+echo 'mount -t efs ${aws_efs_file_system.assetstore.id}:/ /assetstore' >> /etc/mount_assetstore.sh
 echo 'GIRDER_WORKER_BROKER=amqps://histomics:${random_password.mq_password.result}@${aws_mq_broker.jobs_queue.id}.mq.${data.aws_region.current.name}.amazonaws.com:5671' >> /etc/girder_worker.env
+echo 'GIRDER_MONGO_URI=${local.mongodb_uri}' >> /etc/girder_worker.env
 EOF
   subnet_id              = "subnet-08528e25501eede26" # TODO don't hardcode
   iam_instance_profile   = aws_iam_instance_profile.worker.name

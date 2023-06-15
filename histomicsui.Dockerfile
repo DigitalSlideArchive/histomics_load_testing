@@ -6,8 +6,13 @@ ENV LANG en_US.UTF-8
 RUN virtualenv --python 3.9 /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
+RUN cd /opt && \
+    git clone https://github.com/girder/large_image.git && \
+    cd /opt/large_image && \
+    pip install .[sources] --no-cache-dir --find-links https://girder.github.io/large_image_wheels && \
+    pip install ./girder_annotation && \
+    pip install ./girder
 
-RUN pip install large-image[sources] --no-cache-dir --find-links https://girder.github.io/large_image_wheels
 RUN cd /opt && \
     git clone https://github.com/DigitalSlideArchive/HistomicsUI && \
     cd /opt/HistomicsUI && \
@@ -20,7 +25,7 @@ RUN cd /opt && \
     git checkout upload-task-specs-from-client && \
     pip install --no-cache-dir -e .[girder]
 
-RUN pip install gevent gunicorn girder-worker[girder] girder-sentry
+RUN pip install gunicorn girder-worker[girder] girder-sentry
 
 WORKDIR /opt/HistomicsUI
 
