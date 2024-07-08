@@ -234,10 +234,10 @@ resource "aws_ecs_task_definition" "histomics_task" {
     [
       {
         name  = "histomics-server"
-        image = "zachmullen/histomics-load-test@sha256:7515018984053e5681c5046de1d1834cddfe8bbdde41253f47d82144560de55b"
+        image = "zachmullen/histomics-load-test@sha256:05f6f0ce0162ee196565b2aa87a05a987f8687b4f0806985d829f32d91deede7"
         entryPoint = [
           "gunicorn",
-          "histomicsui.wsgi:app",
+          "girder.wsgi:app",
           "--bind=0.0.0.0:8080",
           "--workers=5",
           "--preload",
@@ -276,8 +276,12 @@ resource "aws_ecs_task_definition" "histomics_task" {
             value = var.sentry_frontend_dsn
           },
           {
-            name = "GIRDER_MAX_CURSOR_TIMEOUT_MS"
-            value = "3600000"  # DocumentDB does not support no_timeout cursors
+            name  = "GIRDER_MAX_CURSOR_TIMEOUT_MS"
+            value = "3600000" # DocumentDB does not support no_timeout cursors
+          },
+          {
+            name  = "GIRDER_STATIC_REST_ONLY" # don't dynamically generate slicer_cli_web endpoints
+            value = "true"
           }
         ],
         mountPoints = [

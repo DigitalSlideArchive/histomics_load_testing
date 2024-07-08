@@ -15,7 +15,7 @@ services:
       - GIRDER_MONGO_URI=mongodb://mongodb:27017/girder
     command:
       - "gunicorn"
-      - "histomicsui.wsgi:app"
+      - "girder.wsgi:app"
       - "--bind=0.0.0.0:8080"
       - "--workers=${HISTOMICS_WORKER_COUNT:-5}"
       - "--preload"
