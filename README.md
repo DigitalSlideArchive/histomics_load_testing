@@ -29,3 +29,11 @@ Use the following command (with any numbers n and m):
 ```
 locust --headless --users [n] --spawn-rate [m] -H http://localhost:8080
 ```
+
+### Deploying histomics-demo.com
+
+1. `. .env.local`
+1. `docker build -t zachmullen/histomics-load-test -f histomicsui.Dockerfile .`
+1. `docker push`
+1. Copy the SHA from the docker push command and paste it into `main.tf`
+1. From the terraform directory, run `terraform apply -var-file=.tfvars`

@@ -55,6 +55,6 @@ RUN cd /opt && \
     cd ./histomicsui/web_client && npm i && npm run build && cd ../.. && \
     pip install --no-cache-dir -e .[analysis]
 
-RUN pip install gunicorn 'girder>=5.0.0a3' 'girder-sentry>=5.0.0a3'
+RUN pip install gunicorn 'girder>=5.0.0a4' 'girder-sentry>=5.0.0a4'
 
 WORKDIR /opt/HistomicsUI
